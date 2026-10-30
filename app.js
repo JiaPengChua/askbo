@@ -3,7 +3,7 @@
 // The conversation is opened the moment the page loads, before the customer does anything, so
 // the slow part (SDK boot + chatter + welcome) is over by the time they ask. Only sendMessage()
 // and getMessages() / ada:message:received are used to talk to Bo.
-import { HANDLE, HERO, POPULAR, SERVICES, TOPICS, LINKS } from "./content.js?v=20261030a";
+import { HANDLE, HERO, POPULAR, SERVICES, TOPICS, LINKS } from "./content.js?v=20261030b";
 
 const $ = (s) => document.querySelector(s);
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -68,8 +68,10 @@ $("#panel-tiles").innerHTML = tilesHTML();
 $("#panel-topics").innerHTML = TOPICS.map((o, i) => o.ask
   ? `<button class="ab-chip" type="button" data-ask="${i}" data-src="topics">${esc(o.title)}</button>`
   : `<a class="ab-chip link" href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.title)} ${ICON_EXT}</a>`).join("");
-// The header Topics menu stays what it is on the live site: plain links.
-$("#topics-menu").innerHTML = TOPICS.map((o) => `<a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.title)}</a>`).join("");
+// The header Topics menu follows the same rule: knowledge-backed topics go to Bo, the rest open the page.
+$("#topics-menu").innerHTML = TOPICS.map((o, i) => o.ask
+  ? `<button type="button" data-ask="${i}" data-src="topics">${esc(o.title)}</button>`
+  : `<a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.title)} ${ICON_EXT}</a>`).join("");
 
 const SOURCES = { popular: POPULAR, services: SERVICES, topics: TOPICS };
 document.addEventListener("click", (e) => {
@@ -77,6 +79,7 @@ document.addEventListener("click", (e) => {
   if (!b) return;
   const o = SOURCES[b.dataset.src][+b.dataset.ask];
   closePanel();
+  topicsMenu.hidden = true; topicsBtn.setAttribute("aria-expanded", "false");
   ask(o.title);
 });
 
@@ -111,21 +114,42 @@ function inline(s) {
   s = s.replace(/(^|[^*\w])\*([^*\n]+)\*(?!\w)/g, "$1<em>$2</em>");
   return s;
 }
+// Status words in a table cell become coloured pills (disruption tables: Suspend, Moved, …).
+function statusPill(cellHTML) {
+  const t = cellHTML.replace(/<[^>]+>/g, "").trim();
+  if (/^(suspend|cancel|closed|not operating)/i.test(t)) return `<span class="pill bad">${cellHTML}</span>`;
+  if (/^(moved|retime|delay|change|rerout|revised)/i.test(t)) return `<span class="pill warn">${cellHTML}</span>`;
+  if (/^(on time|operating|normal|resumed|active)/i.test(t)) return `<span class="pill ok">${cellHTML}</span>`;
+  return cellHTML;
+}
+const cells = (l) => l.replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
+function table(rows) {
+  const isSep = (l) => /^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?$/.test(l);
+  const head = isSep(rows[1] || "") ? cells(rows[0]) : null;
+  const body = rows.slice(head ? 2 : 0).filter((l) => !isSep(l)).map(cells);
+  // data-label feeds the phone layout, where each row becomes a card of "label: value" lines.
+  const td = (c, i) => `<td${head?.[i] ? ` data-label="${head[i].replace(/"/g, "&quot;")}"` : ""}${c.length > 40 ? ' class="long"' : ""}>${statusPill(inline(c))}</td>`;
+  return `<div class="tbl${head ? " has-head" : ""}"><table>${head ? `<thead><tr>${head.map((c) => `<th>${inline(c)}</th>`).join("")}</tr></thead>` : ""}<tbody>${
+    body.map((r) => `<tr>${r.map(td).join("")}</tr>`).join("")}</tbody></table></div>${body.length > 6 ? `<p class="tbl-note">${body.length} rows</p>` : ""}`;
+}
 function md(text) {
   const lines = esc(text).replace(/\r/g, "").split("\n");
-  let html = "", list = null, para = [];
+  let html = "", list = null, para = [], tbl = [];
   const flushPara = () => { if (para.length) { html += `<p>${para.map(inline).join("<br>")}</p>`; para = []; } };
   const closeList = () => { if (list) { html += `</${list}>`; list = null; } };
+  const flushTbl = () => { if (tbl.length) { html += table(tbl); tbl = []; } };
   for (const raw of lines) {
     const l = raw.trim();
     let m;
+    if (l.startsWith("|") && l.indexOf("|", 1) > 0) { flushPara(); closeList(); tbl.push(l); continue; }
+    flushTbl();
     if (!l) { flushPara(); closeList(); continue; }
     if ((m = l.match(/^#{1,6}\s+(.*)$/))) { flushPara(); closeList(); html += `<h4>${inline(m[1])}</h4>`; continue; }
     if ((m = l.match(/^[-•*]\s+(.*)$/))) { flushPara(); if (list !== "ul") { closeList(); html += "<ul>"; list = "ul"; } html += `<li>${inline(m[1])}</li>`; continue; }
     if ((m = l.match(/^\d+[.)]\s+(.*)$/))) { flushPara(); if (list !== "ol") { closeList(); html += "<ol>"; list = "ol"; } html += `<li>${inline(m[1])}</li>`; continue; }
     closeList(); para.push(l);
   }
-  flushPara(); closeList();
+  flushTbl(); flushPara(); closeList();
   return html;
 }
 
@@ -210,7 +234,8 @@ function ingest(m) {
     return;
   }
   // Headless delivers buttons / lists with no content (no prompt, no options).
-  log("bodyless message", m.type);
+  log("rich message", m.type, JSON.stringify(m.data || {}).slice(0, 300));
+  if (renderRich(m)) return;
   if (!state.bodylessNoted) { state.bodylessNoted = true; renderSys("Bo sent options this page can’t display. Please type your answer instead.", true); }
 }
 
@@ -308,13 +333,139 @@ async function openerAndSettle() {
   log("welcome never settled, continuing");
 }
 
+/* ---------------- rich messages (pictures, cards, links, options) ---------------- */
+// Messaging rows arrive bodyless with their content in m.data. Field names differ by row type
+// and runtime version, so each reader tries the camelCase and snake_case spellings.
+const pick = (o, ...ks) => { for (const k of ks) { const v = k.split(".").reduce((a, p) => a?.[p], o); if (v != null && v !== "") return v; } return null; };
+const safeUrl = (u) => typeof u === "string" && /^https?:\/\//i.test(u) ? u : null;
+const IMG_RE = /\.(png|jpe?g|gif|webp|svg)(\?|#|$)/i;
+function findUrls(o, out = []) {
+  if (typeof o === "string") { if (safeUrl(o)) out.push(o); }
+  else if (o && typeof o === "object") Object.values(o).forEach((v) => findUrls(v, out));
+  return out;
+}
+function richRow(html, ghost) {
+  showThread();
+  const before = typingRow ? typingRow.previousElementSibling : thread.lastElementChild;
+  const row = document.createElement("div");
+  row.className = "row bot";
+  row.innerHTML = `<div class="av${ghost ?? (before && before === lastBotRow) ? " ghost" : ""}"><img src="assets/bo.png" alt=""></div><div class="rich">${html}</div>`;
+  appendRow(row, true); lastBotRow = row;
+  return row;
+}
+function linkCard(url, title, sub) {
+  return `<a class="linkcard" href="${esc(url)}" target="_blank" rel="noopener"><span><b>${esc(title || url.replace(/^https?:\/\//, "").split("/")[0])}</b>${sub ? `<span>${esc(sub)}</span>` : ""}</span>${ICON_EXT}</a>`;
+}
+function renderRich(m) {
+  const d = m.data || {};
+  const qrs = pick(d, "quickReplies", "quick_replies");
+  if (Array.isArray(qrs) && qrs.length) { renderQuickReplies(m.id, qrs); return true; }
+  switch (m.type) {
+    case "picture": case "image": {
+      const u = safeUrl(pick(d, "picUrl", "pic_url", "url", "imageUrl", "image.url", "src"));
+      if (!u) break;
+      const alt = pick(d, "altText", "alt_text", "alt") || "";
+      const fig = `<figure class="slide"><a class="pic" href="${esc(u)}" target="_blank" rel="noopener" title="Open full size"><img src="${esc(u)}" alt="${esc(alt)}" loading="lazy"></a>${alt ? `<figcaption class="cap">${esc(alt)}</figcaption>` : ""}</figure>`;
+      // Pictures sent back to back (e.g. "page 1/2/3" cards) share one swipeable carousel.
+      let rail = lastBotRow?.querySelector(".rail");
+      if (rail && lastBotRow === (typingRow ? typingRow.previousElementSibling : thread.lastElementChild)) {
+        rail.insertAdjacentHTML("beforeend", fig);
+        rail.closest(".rich").classList.add("multi");
+        rail.parentElement.querySelector(".rail-count").textContent = `${rail.children.length} images · swipe or scroll`;
+      } else {
+        rail = richRow(`<div class="rail">${fig}</div><p class="rail-count"></p>`).querySelector(".rail");
+      }
+      // An image that fails to load becomes a plain link card instead of a broken-image icon.
+      const slide = rail.lastElementChild;
+      slide.querySelector("img").addEventListener("error", () => { slide.innerHTML = linkCard(u, alt || "View image"); }, { once: true });
+      return true;
+    }
+    case "link": {
+      const u = safeUrl(pick(d, "linkUrl", "link_url", "url", "link"));
+      if (!u) break;
+      const body = pick(d, "body", "text");
+      richRow(`${body ? `<div class="bub">${md(body)}</div>` : ""}${linkCard(u, pick(d, "linkText", "link_text", "title"), pick(d, "linkSubtext", "description"))}`);
+      return true;
+    }
+    case "video": case "downloadable": case "file": {
+      const u = safeUrl(pick(d, "vidUrl", "vid_url", "url", "fileUrl", "file_url"));
+      if (!u) break;
+      richRow(linkCard(u, pick(d, "name", "title", "caption") || (m.type === "video" ? "Watch video" : "Download file"), pick(d, "caption")));
+      return true;
+    }
+    case "widget": {
+      const u = safeUrl(pick(d, "widgetUrl", "widget_url", "url"));
+      if (!u) break;
+      richRow(linkCard(u, pick(d, "linkText", "link_text", "widgetName") || "Open", pick(d, "linkSubtext", "link_subtext")));
+      return true;
+    }
+    case "options_message": case "surfaceable_list_selection": {
+      const opts = pick(d, "options", "selectables") || [];
+      if (!opts.length) break;
+      const prompt = pick(d, "prompt", "body", "text");
+      if (prompt) renderBot(prompt, m.role);
+      // Answered as text: these rows have no selectQuickReply equivalent on the host SDK.
+      renderQuickReplies(null, opts.map((o) => typeof o === "string" ? { label: o } : { label: o.label || o.text || o.title || o.value, card: o.description ? { title: o.label || o.text, description: o.description } : null }));
+      return true;
+    }
+  }
+  // Unknown or unreadable row: show any links it carries rather than dropping it.
+  const urls = [...new Set(findUrls(d))];
+  if (urls.length) {
+    richRow(urls.map((u) => IMG_RE.test(u) ? `<a class="pic" href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="" loading="lazy"></a>` : linkCard(u)).join(""));
+    return true;
+  }
+  return false;
+}
+
+/* ---------------- quick replies ---------------- */
+// Bo's buttons arrive as a bodyless quick_replies message with data.quickReplies
+// [{label, value, buttonType, target}]. They hang under Bo's last bubble; a click answers
+// with selectQuickReply(messageId, index), and any new question makes older buttons stale.
+function renderQuickReplies(msgId, qrs) {
+  showThread();
+  const row = document.createElement("div");
+  row.className = "row bot";
+  row.innerHTML = `<div class="av ghost"><img src="assets/bo.png" alt=""></div><div class="qr" role="group" aria-label="Choose an option"></div>`;
+  const box = row.querySelector(".qr");
+  const asCards = qrs.some((q) => q.card && (q.card.image || q.card.description));
+  if (asCards) box.classList.add("cards");
+  else if (qrs.length > 3 || qrs.some((q) => (q.label || "").length > 28)) box.classList.add("stacked");
+  qrs.forEach((q, i) => {
+    const url = safeUrl(q.target) || safeUrl(q.url) || (/link|url/i.test(q.buttonType || q.button_type || "") ? safeUrl(q.value) : null);
+    const el = document.createElement(url ? "a" : "button");
+    el.className = "qr-btn" + (url ? " link" : "") + (asCards ? " card" : "");
+    const label = q.label || q.value || `Option ${i + 1}`;
+    const img = safeUrl(q.card?.image?.url || q.card?.image);
+    el.innerHTML = asCards
+      ? `${img ? `<img src="${esc(img)}" alt="${esc(q.card?.image?.alt || "")}" loading="lazy">` : ""}<b>${esc(q.card?.title || label)}</b>${q.card?.description ? `<span>${esc(q.card.description)}</span>` : ""}`
+      : esc(label) + (url ? ` ${ICON_EXT}` : "");
+    if (url) { el.href = url; el.target = "_blank"; el.rel = "noopener"; }
+    else {
+      el.type = "button";
+      el.addEventListener("click", () => {
+        if (box.classList.contains("done")) return;
+        box.classList.add("done"); el.classList.add("picked");
+        box.querySelectorAll("button").forEach((b) => (b.disabled = true));
+        ask(label, msgId ? { id: msgId, index: i } : null);
+      });
+    }
+    box.append(el);
+  });
+  appendRow(row); lastBotRow = row;
+}
+function retireQuickReplies() {
+  thread.querySelectorAll(".qr:not(.done)").forEach((box) => { box.classList.add("done"); box.querySelectorAll("button").forEach((b) => (b.disabled = true)); });
+}
+
 /* ---------------- sending ---------------- */
-function ask(text) {
+function ask(text, qr) {
   text = String(text || "").trim().slice(0, 500);
   if (!text) return;
+  retireQuickReplies();
   const row = renderUser(text, true);
   state.pending.push({ text, row });
-  state.queue.push(text);
+  state.queue.push({ text, qr });
   if (!state.ready) renderSys("Bo is getting ready. Your question will be sent in a moment.");
   startAwaiting();
   pump();
@@ -328,15 +479,22 @@ async function pump() {
   state.sending = true;
   try {
     while (state.ready && state.queue.length) {
-      const text = state.queue[0];
+      const { text, qr } = state.queue[0];
       const wait = state.lastSendAt + MIN_SEND_GAP_MS - Date.now();
       if (wait > 0) await delay(wait);
+      let useQr = !!(qr && window.adaEmbed.selectQuickReply);
       for (let attempt = 1; ; attempt++) {
         try {
           // Everything Bo sent before the first real question is the welcome: hold it back.
           state.live = true;
           state.lastSendAt = Date.now();
-          const id = await race(window.adaEmbed.sendMessage(text), 30000, "sendMessage");
+          let id;
+          if (useQr) {
+            try { id = await race(window.adaEmbed.selectQuickReply(qr.id, qr.index), 15000, "selectQuickReply"); log("quick reply", qr.index, text); }
+            catch (e) { log("selectQuickReply failed, sending the label", e?.message); useQr = false; throw Object.assign(new Error("retry as text (not ready)"), { cause: e }); }
+          } else {
+            id = await race(window.adaEmbed.sendMessage(text), 30000, "sendMessage");
+          }
           log("sent", id?.id || id, text.slice(0, 60));
           const i = state.pending.findIndex((p) => p.text === text);
           if (i >= 0) { state.pending[i].row.classList.remove("pending"); state.pending.splice(i, 1); }

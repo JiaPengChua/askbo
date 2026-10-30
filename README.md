@@ -31,8 +31,16 @@ Live: https://jiapengchua.github.io/askbo/
   the previous bubble updates that bubble instead of adding a new one.
 - `airasia-gen` has `persistence: private`, so each page load gets a new chatter and there's no earlier
   chat to resume. The page resumes from `getMessages()` on bots that do persist.
-- Headless delivers buttons/lists with no content. The page shows a neutral note asking the customer to
-  type their answer, and never makes up options.
+- **Rich messages render.** On this bot the SDK delivers buttons and images in full:
+  - `quick_replies` (`data.quickReplies` = label/value/buttonType) are drawn as buttons and answered with
+    `adaEmbed.selectQuickReply(messageId, index)`, falling back to sending the label as text. Older
+    buttons are disabled once the customer moves on. Replies with a `card` render as image cards.
+  - `picture` (`data.picUrl`), e.g. the travel-notice "Disrupted flights" cards. Back-to-back pictures share
+    one swipeable carousel, and an image that fails to load becomes a link card.
+  - `link`, `video`, file, `widget`, `options_message` and `surfaceable_list_selection` have renderers too.
+    Any other row with a URL in it shows as a link or image, so nothing is silently dropped.
+- Markdown tables (Bo sends them for disruption lists) render as real tables, with status pills
+  (Suspend / Moved / On time). On a phone each row becomes a card.
 
 ## Quick options
 
@@ -41,7 +49,7 @@ The options are AirAsia's own, from https://support.airasia.com/s/?language=en_G
 [content.js](content.js).
 
 Every option has its AirAsia URL. If Bo's knowledge supports the option (`ask: true`), a click
-sends its title to Bo, and the ↗ icon still opens the page. Otherwise the click only opens the page in a
+sends its title to Bo (tiles, panel chips and the header Topics menu alike), and the ↗ icon still opens the page. Otherwise the click only opens the page in a
 new tab.
 
 Support was checked two ways: against the enabled English articles in airasia-gen's knowledge base
