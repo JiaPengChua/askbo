@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AskBo — AirAsia Support</title>
+<meta name="description" content="AskBo AI Mode mockup: AirAsia support with a full-page Bo chat driven by Ada's headless Embed SDK.">
+<link rel="icon" href="assets/favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Maven+Pro:wght@500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://static.ada.support">
+<link rel="stylesheet" href="style.css?v=20261030a">
+</head>
+<body>
+
+<!-- AirAsia support site chrome -->
+<header class="aa-header">
+  <div class="aa-util"><div class="aa-in"><span class="aa-lang">English (UK) (GB) <svg viewBox="0 0 10 6" aria-hidden="true"><path d="M0 0h10L5 6z" fill="currentColor"/></svg></span></div></div>
+  <div class="aa-band">
+    <div class="aa-in">
+      <a class="aa-logo" id="aa-logo" href="#" aria-label="AirAsia MOVE support home"><img src="assets/logo.png" alt="AirAsia MOVE"></a>
+      <form class="aa-search" id="aa-search" role="search">
+        <svg viewBox="0 0 520 520" aria-hidden="true"><path fill="currentColor" d="M496 453L362 320a189 189 0 10-340-92 190 190 0 00298 135l133 133a14 14 0 0021 0l21-21a17 17 0 001-22M210 338a129 129 0 11130-130 129 129 0 01-130 130"/></svg>
+        <label class="sr-only" for="aa-q">Search support articles</label>
+        <input id="aa-q" type="search" maxlength="100" placeholder="Enter a topic eg. Airport, Baggage, Tax">
+      </form>
+    </div>
+  </div>
+  <nav class="aa-nav" aria-label="Support">
+    <div class="aa-in">
+      <a id="nav-home" href="#" aria-label="Home"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 3 2 12h3v8h5v-6h4v6h5v-8h3z"/></svg></a>
+      <div class="aa-dd">
+        <button type="button" id="topics-btn" aria-expanded="false" aria-controls="topics-menu">Topics <svg viewBox="0 0 12 8" aria-hidden="true"><path d="M1 1l5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg></button>
+        <div class="aa-menu" id="topics-menu" hidden></div>
+      </div>
+      <a id="nav-cases" href="#" target="_blank" rel="noopener">My Cases</a>
+    </div>
+  </nav>
+</header>
+
+<!-- AskBo AI Mode -->
+<main class="app" aria-label="AskBo">
+  <div class="scroll" id="scroll">
+    <div class="ab-bar">
+      <div class="ab-brand"><img src="assets/bo.png" alt="">AskBo <span class="ab-beta">BETA</span></div>
+      <span class="ab-status" id="status"><i></i><span id="status-text">Connecting to Bo…</span></span>
+      <div class="ab-actions">
+        <button class="ab-pill" id="open-panel" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 4h7v7H4zm9 0h7v7h-7zM4 13h7v7H4zm9 0h7v7h-7z"/></svg><span>All services</span></button>
+        <button class="ab-pill ghost" id="new-chat" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 4V1L8 5l4 4V6a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z"/></svg><span>New chat</span></button>
+      </div>
+    </div>
+
+    <section class="ab-hero" id="hero">
+      <h1 id="hero-title"></h1>
+      <p class="lead" id="hero-lead"></p>
+      <h2 class="ab-kicker">Popular articles</h2>
+      <div class="ab-cards" id="cards"></div>
+      <h2 class="ab-kicker">Our services</h2>
+      <div class="ab-tiles" id="hero-tiles"></div>
+      <p class="ab-legend"><span class="tag ask">Ask Bo</span> sends the topic to Bo · <span class="tag link">Opens page <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14 3h7v7h-2V6.4l-9.3 9.3-1.4-1.4L17.6 5H14zM5 5h6v2H5v12h12v-6h2v8H3V5z"/></svg></span> goes to the AirAsia page</p>
+    </section>
+
+    <div class="thread" id="thread" hidden aria-live="polite"></div>
+  </div>
+
+  <div class="dock">
+    <form class="ab-composer" id="composer">
+      <label class="sr-only" for="q">Message Bo</label>
+      <textarea id="q" rows="2" maxlength="500" placeholder="Ask Bo a question…"></textarea>
+      <button class="ab-send" id="sendbtn" type="submit" aria-label="Send message"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 20.5 21 12 3 3.5 3 10l12 2-12 2z"/></svg></button>
+    </form>
+    <p class="ab-disclaimer">Bo is an AI agent and can make mistakes. Check important details on <a id="lnk-aa" href="#" target="_blank" rel="noopener">airasia.com</a> · <a id="lnk-terms" href="#" target="_blank" rel="noopener">Terms of Use</a></p>
+  </div>
+</main>
+
+<!-- All services panel -->
+<div class="ab-scrim" id="scrim"></div>
+<aside class="ab-panel" id="panel" aria-label="All services" aria-hidden="true">
+  <button class="ab-close" id="close-panel" type="button" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M18.3 5.7 12 12l6.3 6.3-1.4 1.4L10.6 13.4 4.3 19.7 2.9 18.3 9.2 12 2.9 5.7l1.4-1.4 6.3 6.3 6.3-6.3z"/></svg></button>
+  <h2>How can Bo help?</h2>
+  <p class="ab-kicker">Our services</p>
+  <div class="ab-tiles" id="panel-tiles"></div>
+  <p class="ab-kicker">Help topics</p>
+  <div class="ab-chips" id="panel-topics"></div>
+  <p class="ab-kicker">Contact channels</p>
+  <div class="ab-chips">
+    <a class="ab-chip link" id="lnk-cases" href="#" target="_blank" rel="noopener">My Cases <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M14 3h7v7h-2V6.4l-9.3 9.3-1.4-1.4L17.6 5H14zM5 5h6v2H5v12h12v-6h2v8H3V5z"/></svg></a>
+  </div>
+</aside>
+
+<div class="ab-toast" id="toast" role="status"></div>
+<p class="mock-foot">Ada demo mockup — not an official AirAsia page. AirAsia names and logos belong to AirAsia.</p>
+
+<script type="module" src="app.js?v=20261030a"></script>
+</body>
+</html>
